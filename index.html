@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Fabric Update</title>
+
+<style>
+  body {
+    font-family: system-ui, -apple-system, sans-serif;
+    background: #f5f5f5;
+    padding: 16px;
+  }
+  .card {
+    max-width: 420px;
+    margin: auto;
+    background: #fff;
+    padding: 16px;
+    border-radius: 14px;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.08);
+  }
+  h2 {
+    margin: 0 0 12px;
+    font-size: 20px;
+  }
+  label {
+    font-size: 13px;
+    font-weight: 600;
+    margin-top: 12px;
+    display: block;
+  }
+  select, input, textarea, button {
+    width: 100%;
+    padding: 10px;
+    margin-top: 6px;
+    border-radius: 8px;
+    border: 1px solid #ccc;
+    font-size: 14px;
+  }
+  textarea {
+    resize: vertical;
+  }
+  button {
+    background: #111;
+    color: #fff;
+    border: none;
+    margin-top: 16px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  button:disabled {
+    background: #999;
+  }
+  .note {
+    font-size: 12px;
+    color: #666;
+    margin-top: 6px;
+  }
+</style>
+</head>
+
+<body>
+
+<div class="card">
+  <h2>Aaj ka Fabric Update</h2>
+
+  <label>Yarn Challan</label>
+  <select id="yarn"></select>
+
+  <label>Fabric Type</label>
+  <select id="fabric"></select>
+
+  <label>Machine</label>
+  <input id="machine" placeholder="Machine label (e.g. M3)" />
+
+  <label>Expected GSM</label>
+  <input id="gsm" type="number" />
+
+  <label>Expected SL</label>
+  <input id="sl" type="number" />
+
+  <label>Status</label>
+  <select id="status">
+    <option value="Running">Running</option>
+    <option value="Paused">Paused</option>
+    <option value="Issue">Issue</option>
+  </select>
+
+  <label>Remarks (optional)</label>
+  <textarea id="remarks" rows="2"></textarea>
+
+  <button id="saveBtn" onclick="submitData()">Update Karo</button>
+
+  <div class="note">
+    ℹ️ GSM / SL auto-filled hai. Final value challan pe decide hoti hai.
+  </div>
+</div>
+
+<script>
+/*********** CONFIG ***********/
+const API_URL = "https://script.google.com/macros/s/AKfycbyjVHIioeD_8D9e-VWWt4ngqSxQdt7YQfDrfoyPJvqRD6DBv1Hr2VNFXo0Za3U6z7VM/exec";
+
+/*********** TOKEN ***********/
+const token = new URLSearchParams(window.location.search).get("token");
+if (!token) {
+  alert("Invalid link");
+}
+
+/*********** LOAD DATA ***********/
+fetch(`${API_URL}?action=load&token=${token}`)
+  .then(res => res.json())
+  .then(data => {
+    if (data.error) {
+      alert(data.error);
+      return;
+    }
+
+    // Yarn challans
+    yarn.innerHTML = data.yarn
+      .map(y => `<option value="${y.challan}">${y.challan} (${y.lot})</option>`)
+      .join("");
+
+    // Fabric master
+    fabric.innerHTML = data.fabric
+      .map(f => `<option value='${JSON.stringify(f)}'>${f.fabric_type}</option>`)
+      .join("");
+
+    fabric.onchange();
+  });
+
+/*********** AUTO GSM / SL ***********/
+fabric.onchange = () => {
+  const f = JSON.parse(fabric.value);
+  gsm.value = f.default_gsm;
+  sl.value = f.default_sl;
+};
+
+/*********** SUBMIT ***********/
+function submitData() {
+  if (!machine.value.trim()) {
+    alert("Machine label zaruri hai");
+    return;
+  }
+
+  const f = JSON.parse(fabric.value);
+
+  // Range validation
+  if (gsm.value < f.gsm_min || gsm.value > f.gsm_max) {
+    alert(`GSM ${f.gsm_min}–${f.gsm_max} ke beech hona chahiye`);
+    return;
+  }
+
+  if (sl.value < f.sl_min || sl.value > f.sl_max) {
+    alert(`SL ${f.sl_min}–${f.sl_max} ke beech hona chahiye`);
+    return;
+  }
+
+  saveBtn.disabled = true;
+  saveBtn.innerText = "Saving...";
+
+  fetch(API_URL, {
+    method: "POST",
+    body: JSON.stringify({
+      token: token,
+      yarn_challan_no: yarn.value,
+      fabric_type: f.fabric_type,
+      machine_label: machine.value.trim(),
+      expected_gsm: gsm.value,
+      expected_sl: sl.value,
+      status: status.value,
+      remarks: remarks.value
+    })
+  })
+  .then(res => res.json())
+  .then(resp => {
+    saveBtn.disabled = false;
+    saveBtn.innerText = "Update Karo";
+
+    if (resp.error) {
+      alert(resp.error);
+    } else {
+      alert("Update saved ✔️");
+      remarks.value = "";
+    }
+  })
+  .catch(() => {
+    saveBtn.disabled = false;
+    saveBtn.innerText = "Update Karo";
+    alert("Network error");
+  });
+}
+</script>
+
+</body>
+</html>
